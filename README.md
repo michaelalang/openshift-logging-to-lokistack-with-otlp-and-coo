@@ -166,3 +166,91 @@ sum by (log_type) (
 
 the following show the logs during the outage test for this demo
 ![Logs backfill](pictures/Logs-backfill.png)
+
+## Federating multiple clusters into one LokiStack (NOTE unsupported !!!)
+
+we all know that needing to move to logging console in cluster1 and than into cluster2 and and and is soo anoying. 
+With otc we get the possibility to federate the logs into one LokiStack and as long as this Stack is capable to take the load we no longer need to move to different UI's.
+
+!!! NOTE !!! even though this is technically possible, there is no support from Red Hat on that feature at the moment or planned. For federated Cluster Observability please evaluate Red Hat Advanced Cluster manager.
+
+
+### Integrating foreing OpenShift Clusters into your LokiStack
+
+Follow the steps from `deploying the necessary Operators`
+
+* [Deploying the OpenShift Cluster logging Operator](#deploying-the-openshift-cluster-logging-operator)
+* [Configure the OpenTelemetry collector](#deploying-the-loki-operator)
+* [Configure the OpenShift Cluster logging forwarder](#configure-the-openshift-cluster-logging-forwarder)
+
+Next ensure to expose the otc otlphttp endpoint on the centralized cluster for remote access by executing following command 
+
+```
+cat <<'EOF' | oc create -f -
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: otel-collector
+  namespace: openshift-logging
+spec:
+  host: otc-openshift-logging.apps.example.com
+  port:
+    targetPort: otlp-http
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: otel-collector
+    weight: 100
+  wildcardPolicy: None
+EOF
+```
+
+Configure the OpenTelemetry Collector by replacing the `otlphttp/lokistack` exporter with 
+the create route of the centralize collector and add certificates accordingly if needed
+
+```
+spec:
+  config:
+    exporters:
+      otlphttp/logging:
+        endpoint: https://otc-openshift-logging.apps.example.com
+        tls:
+          ca_file: /etc/certs/ca-trustbundle.pem
+
+  volumeMounts:
+    - mountPath: /etc/certs/
+      name: mycustomca
+  volumes:
+    - configMap:
+        items:
+          - key: ca-trustbundle.pem
+            path: ca-trustbundle.pem
+        name: mycustomca
+      name: mycustomca
+```
+
+the OpenShift UI will now be able to show logs from multiple clusters depending on the attributes you add/modify you can even select them based upon your custom assigned cluster name if you want by adding transformation processors accordingly.
+
+```
+spec:
+  config:
+    processors
+      transform/clustername:
+        error_mode: ignore
+        log_statements:
+          - set(log.attributes["openshift_cluster_name"], "central") where resource.attributes["openshift.cluster_id"]
+            == "xxxx-xx-xx-xx-xxxx"
+          - set(log.attributes["openshift_cluster_name"], "east") where resource.attributes["openshift.cluster_id"]
+            == "yyyy-yy-yy-yy-yyyy"
+          - set(log.attributes["openshift_cluster_name"], "acm") where resource.attributes["openshift.cluster_id"]
+            == "zzzz-zz-zz-zz-zzzz"
+  service:
+    pipelines:
+      logs:
+        processors:
+          - transform/clustername
+```
+
+![Multi cluster log aggregation centralized UI](pictures/multi-cluster-aggregation.png)
