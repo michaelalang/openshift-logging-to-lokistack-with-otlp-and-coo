@@ -1,0 +1,15 @@
+apiVersion: observability.openshift.io/v1alpha1
+kind: UIPlugin
+metadata:
+  annotations:
+    observability.openshift.io/api-support: GeneralAvailability
+  name: logging
+spec:
+  logging:
+    logsLimit: 50
+    lokiStack:
+      name: lokistack
+      namespace: openshift-logging
+    schema: otel
+    timeout: 30s
+  type: Logging
