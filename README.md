@@ -165,4 +165,4 @@ sum by (log_type) (
 ```
 
 the following show the logs during the outage test for this demo
-![Logs backfill](picturs/Logs-backfill.png)
+![Logs backfill](pictures/Logs-backfill.png)
